@@ -1,0 +1,22 @@
+version: "3.9"
+
+services:
+  billscan:
+    build: .
+    container_name: billscan-ai
+    ports:
+      - "3001:3001"
+    environment:
+      - BILLSCAN_SECRET_KEY=your-production-secret-key-here
+      - DATABASE_URL=sqlite:////app/data/billscan.db
+    volumes:
+      # Persist database and uploaded files across container restarts
+      - billscan-data:/app/data
+      - billscan-uploads:/app/server/uploads
+      - billscan-exports:/app/server/exports
+    restart: unless-stopped
+
+volumes:
+  billscan-data:
+  billscan-uploads:
+  billscan-exports:
