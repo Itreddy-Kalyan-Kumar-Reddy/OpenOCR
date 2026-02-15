@@ -4,13 +4,14 @@ Protected API routes for document processing.
 import os
 import uuid
 import time
+import hashlib
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Body
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from typing import List
 
-from database import get_db, Job, Document, Extraction, User
+from database import get_db, Job, Document, Extraction, ExportRecord, User
 from auth import get_current_user
 from ocr_engine import extract_text
 from extractor import detect_fields, extract_fields, get_available_fields
@@ -105,9 +106,12 @@ async def upload_documents(
             stored_path=stored_path,
             file_size=len(content),
             mime_type=f.content_type,
+            file_hash=hashlib.sha256(content).hexdigest(),
+            upload_timestamp=datetime.utcnow(),
         )
         db.add(doc)
 
+    job.total_documents = len(documents)
     db.commit()
     db.refresh(job)
 
@@ -158,17 +162,20 @@ def run_ocr(
     job.updated_at = datetime.utcnow()
     db.commit()
 
+    start_time = time.time()
     try:
         for doc in job.documents:
             result = extract_text(doc.stored_path)
             doc.ocr_text = result["text"]
             doc.ocr_confidence = result["confidence"]
+            doc.ocr_processed_at = datetime.utcnow()
 
         job.status = "completed"
+        job.processing_time_ms = int((time.time() - start_time) * 1000)
         job.updated_at = datetime.utcnow()
         db.commit()
         db.refresh(job)
-        print(f"✅ OCR completed for job {job_id[:8]}")
+        print(f"✅ OCR completed for job {job_id[:8]} in {job.processing_time_ms}ms")
         return _job_to_dict(job)
 
     except Exception as e:
@@ -265,6 +272,18 @@ def export_excel(
 
     job.excel_path = output_path
     job.updated_at = datetime.utcnow()
+
+    # Track export in ExportRecord table
+    export_size = os.path.getsize(output_path) if os.path.exists(output_path) else 0
+    total_fields = sum(len(d.get("extracted_fields", [])) for d in export_docs)
+    record = ExportRecord(
+        job_id=job_id,
+        file_path=output_path,
+        file_size=export_size,
+        document_count=len(export_docs),
+        field_count=total_fields,
+    )
+    db.add(record)
     db.commit()
 
     return {"message": "Excel generated", "filename": filename, "job_id": job_id}

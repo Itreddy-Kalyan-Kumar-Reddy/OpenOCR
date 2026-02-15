@@ -2,6 +2,7 @@
 JWT Authentication - signup, login, token verification.
 Uses SHA-256 + salt for password hashing (avoids passlib/bcrypt compat issues).
 """
+import os
 import hashlib
 import secrets
 from datetime import datetime, timedelta
@@ -13,8 +14,8 @@ from jose import JWTError, jwt
 
 from database import get_db, User
 
-# Config
-SECRET_KEY = "billscan-ai-secret-key-change-in-production-2024"
+# Config — reads from env var, falls back to dev default
+SECRET_KEY = os.environ.get("BILLSCAN_SECRET_KEY", "billscan-ai-secret-key-change-in-production-2024")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_HOURS = 72
 
