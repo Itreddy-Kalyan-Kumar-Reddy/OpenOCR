@@ -1,4 +1,4 @@
-# BillScan AI
+# OpenOCR
 
 ### Intelligent Billing Document OCR & Data Extraction Platform
 
