@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+venv/
+.env
+
+# Database
+*.db
+*.sqlite3
+
+# Uploads & Exports
+server/uploads/
+server/exports/
+
+# OCR trained data
+*.traineddata
+
+# Node
+node_modules/
+client/node_modules/
+
+# Build
+client/dist/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
