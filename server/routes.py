@@ -151,10 +151,11 @@ def get_job(
 @router.post("/jobs/{job_id}/ocr")
 def run_ocr(
     job_id: str,
+    ocr_request: OCRRequest = OCRRequest(languages=["en"]),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Run OCR on all documents in a job."""
+    """Run OCR on all documents in a job. Accepts optional languages list."""
     job = db.query(Job).filter(Job.id == job_id, Job.user_id == current_user.id).first()
     if not job:
         raise HTTPException(404, "Job not found")
@@ -169,17 +170,18 @@ def run_ocr(
     # Async Processing (Docker/Production)
     if os.environ.get("OCR_MODE") == "async":
         doc_ids = [d.id for d in job.documents]
-        process_ocr_task.delay(job.id, doc_ids)
-        print(f"🚀 Async OCR task started for job {job_id[:8]}")
+        process_ocr_task.delay(job.id, doc_ids, languages=ocr_request.languages)
+        print(f"🚀 Async OCR task started for job {job_id[:8]} with langs {ocr_request.languages}")
         return _job_to_dict(job)
 
     # Sync Processing (Local Dev)
     start_time = time.time()
     try:
         for doc in job.documents:
-            result = extract_text(doc.stored_path)
+            result = extract_text(doc.stored_path, languages=ocr_request.languages)
             doc.ocr_text = result["text"]
             doc.ocr_confidence = result["confidence"]
+            doc.ocr_engine = result.get("method", "easyocr")
             doc.ocr_processed_at = datetime.utcnow()
 
         job.status = "completed"

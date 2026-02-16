@@ -10,7 +10,7 @@ import json
 # For now, let's assume we use the synchronous logic we have or adapted it.
 
 @celery_app.task(bind=True)
-def process_ocr_task(self, job_id: str, doc_ids: list):
+def process_ocr_task(self, job_id: str, doc_ids: list, languages: list = ["en"]):
     """
     Async Celery task to run OCR on a list of documents.
     """
@@ -31,9 +31,10 @@ def process_ocr_task(self, job_id: str, doc_ids: list):
             doc = db.query(Document).filter(Document.id == doc_id).first()
             if doc:
                 # Run OCR
-                result = extract_text(doc.stored_path)
+                result = extract_text(doc.stored_path, languages=languages)
                 doc.ocr_text = result["text"]
                 doc.ocr_confidence = result["confidence"]
+                doc.ocr_engine = result.get("method", "easyocr")
                 doc.ocr_processed_at = datetime.utcnow()
                 
                 # Update task state
