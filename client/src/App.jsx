@@ -4,12 +4,21 @@ import AuthPage from './pages/AuthPage';
 import UploadPage from './pages/UploadPage';
 import JobsDashboard from './pages/JobsDashboard';
 import JobDetail from './pages/JobDetail';
+import ThemeToggle from './components/ThemeToggle';
 
 function App() {
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(null);
   const [toasts, setToasts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [theme, setTheme] = useState(localStorage.getItem('theme') || 'dark');
+
+  useEffect(() => {
+    document.body.classList.toggle('light-mode', theme === 'light');
+    localStorage.setItem('theme', theme);
+  }, [theme]);
+
+  const toggleTheme = () => setTheme(prev => prev === 'dark' ? 'light' : 'dark');
 
   useEffect(() => {
     const savedToken = localStorage.getItem('token');
@@ -86,6 +95,8 @@ function App() {
             </div>
 
             <div className="sidebar-footer">
+              <ThemeToggle theme={theme} toggleTheme={toggleTheme} />
+
               <div className="sidebar-user-info">
                 <div className="sidebar-avatar">{user.name?.charAt(0)?.toUpperCase() || '?'}</div>
                 <div>
