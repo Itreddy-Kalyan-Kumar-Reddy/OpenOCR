@@ -1,3 +1,7 @@
+from sqlalchemy.orm import Session
+from database import AuditLog
+
+
 def log_audit(db: Session, user_id: int, action: str, resource_type: str, resource_id: str = None, details: dict = None, ip_address: str = None):
     """
     Record an entry in the Audit Log.

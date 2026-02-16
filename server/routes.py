@@ -14,13 +14,21 @@ from database import get_db, Job, Document, Extraction, ExportRecord, User, Sess
 from pydantic import BaseModel
 from typing import List, Optional
 
+
+class OCRRequest(BaseModel):
+    languages: List[str] = ["en"]
+
+
 from auth import get_current_user
 from ocr_engine import extract_text
 from extractor import detect_fields, extract_fields, get_available_fields
 from excel_export import generate_excel
-from tasks import process_ocr_task
-from models import OCRRequest # Added missing import for OCRRequest
-from analytics import record_event # Added missing import for analytics
+try:
+    from tasks import process_ocr_task
+    HAS_CELERY = True
+except ImportError:
+    HAS_CELERY = False
+
 
 UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "uploads")
 EXPORT_DIR = os.path.join(os.path.dirname(__file__), "exports")
@@ -165,9 +173,6 @@ def run_ocr(
         raise HTTPException(404, "Job not found")
 
     job.status = "processing"
-    job.updated_at = datetime.utcnow()
-    db.commit()
-
     job.updated_at = datetime.utcnow()
     db.commit()
 

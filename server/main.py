@@ -9,17 +9,24 @@ from starlette.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi import WebSocket, WebSocketDisconnect
 import asyncio
-import redis.asyncio as redis
+try:
+    import redis.asyncio as aioredis
+    HAS_REDIS = True
+except ImportError:
+    HAS_REDIS = False
 import uvicorn
-import os
 from manager import ConnectionManager
 from fastapi.responses import FileResponse
 
 from database import init_db
 from auth import router as auth_router
 from routes import router as api_router
-from security_routes import router as security_router
-from audit import log_audit
+try:
+    from security_routes import router as security_router
+    from audit import log_audit
+    HAS_SECURITY = True
+except ImportError:
+    HAS_SECURITY = False
 
 # WebSocket Manager
 manager = ConnectionManager()
@@ -60,12 +67,12 @@ app.add_middleware(
 # Background task to listen for Redis events
 async def redis_listener():
     """Subscribe to Redis channel and broadcast messages to WebSockets."""
-    # Only run if we are in async/docker mode or Redis is available
-    if os.environ.get("OCR_MODE") != "async" and "redis" not in REDIS_URL:
-         return
+    if not HAS_REDIS:
+        print("ℹ️  Redis not installed — real-time updates disabled (local dev mode)")
+        return
 
     try:
-        r = redis.from_url(REDIS_URL, encoding="utf-8", decode_responses=True)
+        r = aioredis.from_url(REDIS_URL, encoding="utf-8", decode_responses=True)
         async with r.pubsub() as pubsub:
             await pubsub.subscribe("job_updates")
             print("🎧 Listening for Redis job updates...")
@@ -94,7 +101,8 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
 # Include API routers
 app.include_router(auth_router)
 app.include_router(api_router)
-app.include_router(security_router, prefix="/api")
+if HAS_SECURITY:
+    app.include_router(security_router, prefix="/api")
 
 
 @app.get("/api/health")

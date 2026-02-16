@@ -3,7 +3,11 @@ EasyOCR-based OCR engine with confidence scoring.
 """
 import easyocr
 import os
-import fitz  # PyMuPDF
+try:
+    import fitz  # PyMuPDF
+    HAS_FITZ = True
+except ImportError:
+    HAS_FITZ = False
 from typing import Optional
 
 # Initialize reader cache (language_tuple -> reader_instance)
@@ -36,7 +40,7 @@ def extract_text(file_path: str, languages: list = ["en"]) -> dict:
     ext = os.path.splitext(file_path)[1].lower()
 
     # 1. Try Native PDF Extraction
-    if ext == ".pdf":
+    if ext == ".pdf" and HAS_FITZ:
         try:
             doc = fitz.open(file_path)
             full_text = ""
