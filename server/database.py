@@ -5,9 +5,10 @@ extracted fields, and export records.
 """
 import os
 from datetime import datetime
-from sqlalchemy import create_engine, Column, Integer, String, Float, Text, DateTime, ForeignKey, Boolean
+from sqlalchemy import create_engine, Column, Integer, String, Float, Text, DateTime, ForeignKey, Boolean, JSON
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
+import uuid
 
 DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite:///./billscan.db")
 
@@ -24,16 +25,39 @@ Base = declarative_base()
 
 class User(Base):
     __tablename__ = "users"
-
     id = Column(Integer, primary_key=True, index=True)
-    email = Column(String(255), unique=True, index=True, nullable=False)
-    name = Column(String(255), nullable=False)
-    password_hash = Column(String(255), nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    last_login_at = Column(DateTime, nullable=True)
-    is_active = Column(Boolean, default=True)
+    email = Column(String(255), unique=True, index=True)
+    hashed_password = Column(String(255))
+    role = Column(String(50), default="user") # user, admin, auditor
+    jobs = relationship("Job", back_populates="user")
+    api_keys = relationship("APIKey", back_populates="user")
 
-    jobs = relationship("Job", back_populates="user", cascade="all, delete-orphan")
+
+class APIKey(Base):
+    __tablename__ = "api_keys"
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(Integer, ForeignKey("users.id"))
+    key_hash = Column(String(255), index=True)
+    name = Column(String(100))
+    created_at = Column(DateTime, default=datetime.utcnow)
+    expires_at = Column(DateTime, nullable=True)
+    is_active = Column(Boolean, default=True)
+    
+    user = relationship("User", back_populates="api_keys")
+
+
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    action = Column(String(100)) # e.g. "create_job", "delete_job"
+    resource_type = Column(String(50)) # e.g. "job", "document"
+    resource_id = Column(String(50), nullable=True)
+    details = Column(JSON, nullable=True)
+    ip_address = Column(String(50), nullable=True)
+    timestamp = Column(DateTime, default=datetime.utcnow)
+    
+    user = relationship("User")
 
 
 class Job(Base):

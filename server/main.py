@@ -18,6 +18,8 @@ from fastapi.responses import FileResponse
 from database import init_db
 from auth import router as auth_router
 from routes import router as api_router
+from security_routes import router as security_router
+from audit import log_audit
 
 # WebSocket Manager
 manager = ConnectionManager()
@@ -92,6 +94,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
 # Include API routers
 app.include_router(auth_router)
 app.include_router(api_router)
+app.include_router(security_router, prefix="/api")
 
 
 @app.get("/api/health")
