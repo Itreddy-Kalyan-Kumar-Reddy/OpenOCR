@@ -16,6 +16,7 @@ from auth import get_current_user
 from ocr_engine import extract_text
 from extractor import detect_fields, extract_fields, get_available_fields
 from excel_export import generate_excel
+from tasks import process_ocr_task
 
 UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "uploads")
 EXPORT_DIR = os.path.join(os.path.dirname(__file__), "exports")
@@ -162,6 +163,17 @@ def run_ocr(
     job.updated_at = datetime.utcnow()
     db.commit()
 
+    job.updated_at = datetime.utcnow()
+    db.commit()
+
+    # Async Processing (Docker/Production)
+    if os.environ.get("OCR_MODE") == "async":
+        doc_ids = [d.id for d in job.documents]
+        process_ocr_task.delay(job.id, doc_ids)
+        print(f"🚀 Async OCR task started for job {job_id[:8]}")
+        return _job_to_dict(job)
+
+    # Sync Processing (Local Dev)
     start_time = time.time()
     try:
         for doc in job.documents:

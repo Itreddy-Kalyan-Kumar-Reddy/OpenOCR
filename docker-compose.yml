@@ -1,22 +1,73 @@
 version: "3.9"
 
 services:
+  # Database (PostgreSQL)
+  db:
+    image: postgres:15-alpine
+    container_name: billscan-db
+    environment:
+      - POSTGRES_USER=billscan
+      - POSTGRES_PASSWORD=billscan_password
+      - POSTGRES_DB=billscan_db
+    volumes:
+      - billscan-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+
+  # Redis (Broker/Backend for Celery)
+  redis:
+    image: redis:7-alpine
+    container_name: billscan-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - billscan-redis:/data
+    restart: unless-stopped
+
+  # API Server + Frontend
   billscan:
     build: .
-    container_name: billscan-ai
+    container_name: billscan-api
     ports:
       - "3001:3001"
     environment:
-      - BILLSCAN_SECRET_KEY=your-production-secret-key-here
-      - DATABASE_URL=sqlite:////app/data/billscan.db
+      - BILLSCAN_SECRET_KEY=dev-secret-key-change-in-prod
+      - DATABASE_URL=postgresql://billscan:billscan_password@db:5432/billscan_db
+      - REDIS_URL=redis://redis:6379/0
+      - UPLOAD_DIR=/app/server/uploads
+      - EXPORT_DIR=/app/server/exports
+      - OCR_MODE=async
     volumes:
-      # Persist database and uploaded files across container restarts
-      - billscan-data:/app/data
       - billscan-uploads:/app/server/uploads
       - billscan-exports:/app/server/exports
+    depends_on:
+      - db
+      - redis
+    restart: unless-stopped
+
+  # Celery Worker (Async Tasks)
+  worker:
+    build: .
+    container_name: billscan-worker
+    command: celery -A celery_worker.celery_app worker --loglevel=info
+    environment:
+      - BILLSCAN_SECRET_KEY=dev-secret-key-change-in-prod
+      - DATABASE_URL=postgresql://billscan:billscan_password@db:5432/billscan_db
+      - REDIS_URL=redis://redis:6379/0
+      - UPLOAD_DIR=/app/server/uploads
+      - EXPORT_DIR=/app/server/exports
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - billscan-uploads:/app/server/uploads
+      - billscan-exports:/app/server/exports
+    depends_on:
+      - db
+      - redis
     restart: unless-stopped
 
 volumes:
   billscan-data:
+  billscan-redis:
   billscan-uploads:
   billscan-exports:
