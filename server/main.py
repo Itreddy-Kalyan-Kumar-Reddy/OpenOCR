@@ -5,13 +5,23 @@ Serves API routes and (in production/Docker) the frontend build.
 import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi import WebSocket, WebSocketDisconnect
+import asyncio
+import redis.asyncio as redis
+import uvicorn
+import os
+from manager import ConnectionManager
 from fastapi.responses import FileResponse
 
 from database import init_db
 from auth import router as auth_router
 from routes import router as api_router
+
+# WebSocket Manager
+manager = ConnectionManager()
+REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
 
 
 @asynccontextmanager
@@ -31,18 +41,53 @@ app = FastAPI(
 )
 
 # CORS — allow dev and production origins
+origins = [
+    "http://localhost:5173",
+    "http://localhost:3000",
+    "http://127.0.0.1:5173",
+    "http://localhost:3001",
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://localhost:3000",
-        "http://127.0.0.1:5173",
-        "http://localhost:3001",
-    ],
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Background task to listen for Redis events
+async def redis_listener():
+    """Subscribe to Redis channel and broadcast messages to WebSockets."""
+    # Only run if we are in async/docker mode or Redis is available
+    if os.environ.get("OCR_MODE") != "async" and "redis" not in REDIS_URL:
+         return
+
+    try:
+        r = redis.from_url(REDIS_URL, encoding="utf-8", decode_responses=True)
+        async with r.pubsub() as pubsub:
+            await pubsub.subscribe("job_updates")
+            print("🎧 Listening for Redis job updates...")
+            async for message in pubsub.listen():
+                if message["type"] == "message":
+                    # Broadcast the raw JSON message
+                    await manager.broadcast(message["data"])
+    except Exception as e:
+        print(f"⚠️ Redis Listener Error (Async mode might be limited): {e}")
+
+@app.on_event("startup")
+async def startup_event():
+    asyncio.create_task(redis_listener())
+
+@app.websocket("/ws/{client_id}")
+async def websocket_endpoint(websocket: WebSocket, client_id: str):
+    await manager.connect(websocket)
+    try:
+        while True:
+            # Keep the connection open
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        manager.disconnect(websocket)
+
 
 # Include API routers
 app.include_router(auth_router)

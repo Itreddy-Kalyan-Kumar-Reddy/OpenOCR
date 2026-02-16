@@ -9,14 +9,18 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Body
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
-from typing import List
+from sqlalchemy import func, desc
+from database import get_db, Job, Document, Extraction, ExportRecord, User, SessionLocal
+from pydantic import BaseModel
+from typing import List, Optional
 
-from database import get_db, Job, Document, Extraction, ExportRecord, User
 from auth import get_current_user
 from ocr_engine import extract_text
 from extractor import detect_fields, extract_fields, get_available_fields
 from excel_export import generate_excel
 from tasks import process_ocr_task
+from models import OCRRequest # Added missing import for OCRRequest
+from analytics import record_event # Added missing import for analytics
 
 UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "uploads")
 EXPORT_DIR = os.path.join(os.path.dirname(__file__), "exports")
@@ -405,4 +409,41 @@ def preview_document(
         raise HTTPException(404, "Document not found")
 
     return FileResponse(doc.stored_path, media_type=doc.mime_type or "application/octet-stream")
+
+
+@router.get("/analytics/stats")
+def get_analytics_stats(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Get aggregated analytics stats for the dashboard."""
+    # Counts
+    total_jobs = db.query(func.count(Job.id)).filter(Job.user_id == current_user.id).scalar()
+    total_docs = db.query(func.count(Document.id)).join(Job).filter(Job.user_id == current_user.id).scalar()
+    
+    # Averages
+    avg_confidence = db.query(func.avg(Document.ocr_confidence)).join(Job).filter(Job.user_id == current_user.id).scalar() or 0
+    avg_processing_ms = db.query(func.avg(Job.processing_time_ms)).filter(Job.user_id == current_user.id, Job.status == 'completed').scalar() or 0
+
+    # Daily Activity (Last 7 days)
+    # fetch last 100 jobs and aggregate in Python for simplicity/compatibility
+    recent_jobs = db.query(Job).filter(Job.user_id == current_user.id).order_by(Job.created_at.desc()).limit(100).all()
+    
+    daily_stats = {}
+    for job in recent_jobs:
+        date_str = job.created_at.strftime("%Y-%m-%d")
+        if date_str not in daily_stats:
+            daily_stats[date_str] = 0
+        daily_stats[date_str] += job.document_count
+
+    # Convert to list for Recharts
+    chart_data = [{"date": k, "docs": v} for k, v in sorted(daily_stats.items())]
+
+    return {
+        "total_jobs": total_jobs,
+        "total_documents": total_docs,
+        "avg_confidence": round(avg_confidence, 1),
+        "avg_processing_time": round(avg_processing_ms / 1000, 2), # seconds
+        "chart_data": chart_data
+    }
 

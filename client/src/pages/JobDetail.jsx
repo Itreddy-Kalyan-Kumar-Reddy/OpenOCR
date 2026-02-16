@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { getJob, runOCR, extractFields, exportExcel, downloadExcel, getPreviewUrl } from '../api';
+import { useWebSocket } from '../hooks/useWebSocket';
 
 export default function JobDetail({ addToast }) {
     const { id } = useParams();
@@ -29,6 +30,27 @@ export default function JobDetail({ addToast }) {
     };
 
     useEffect(() => { fetchJob(); }, [id]);
+
+    // WebSocket Integration
+    const { lastMessage } = useWebSocket(id);
+
+    useEffect(() => {
+        if (!lastMessage || lastMessage.job_id !== id) return;
+
+        if (lastMessage.type === 'job_progress') {
+            setProcessing(true);
+            setProcessingMsg(`Processing document ${lastMessage.current_doc} of ${lastMessage.total_docs} (${lastMessage.progress}%)`);
+            // Optimistically update status
+            setJob(prev => ({ ...prev, status: 'processing' }));
+        }
+
+        if (lastMessage.type === 'job_completed' || lastMessage.type === 'job_failed') {
+            setProcessing(false);
+            fetchJob(); // Refresh to get the results
+            if (lastMessage.type === 'job_completed') addToast('Job completed successfully', 'success');
+            if (lastMessage.type === 'job_failed') addToast(`Job failed: ${lastMessage.error || 'Unknown error'}`, 'error');
+        }
+    }, [lastMessage, id]);
 
     const activeDoc = job?.documents?.[activeDocIdx];
     const hasOCR = !!activeDoc?.ocr_text;

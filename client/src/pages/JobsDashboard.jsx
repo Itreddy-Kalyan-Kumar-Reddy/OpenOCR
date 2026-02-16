@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { getJobs, retryJob, deleteJob, downloadExcel } from '../api';
+import { useWebSocket } from '../hooks/useWebSocket';
+import DashboardCharts from '../components/DashboardCharts';
 
 export default function JobsDashboard({ addToast }) {
     const [jobs, setJobs] = useState([]);
@@ -14,9 +16,21 @@ export default function JobsDashboard({ addToast }) {
 
     useEffect(() => {
         fetchJobs();
-        const iv = setInterval(fetchJobs, 6000);
+        // Fallback polling (less frequent now)
+        const iv = setInterval(fetchJobs, 15000);
         return () => clearInterval(iv);
     }, []);
+
+    // WebSocket Integration
+    const { lastMessage } = useWebSocket('dashboard');
+
+    useEffect(() => {
+        if (!lastMessage) return;
+        if (lastMessage.type === 'job_completed' || lastMessage.type === 'job_failed') {
+            fetchJobs();
+            addToast(`Job ${lastMessage.job_id.slice(0, 8)} ${lastMessage.status}`, lastMessage.status === 'completed' ? 'success' : 'error');
+        }
+    }, [lastMessage]);
 
     const handleRetry = async (id) => { try { await retryJob(id); addToast('Job reset', 'info'); fetchJobs(); } catch (e) { addToast(e.message, 'error'); } };
     const handleDelete = async (id) => { try { await deleteJob(id); addToast('Job deleted', 'success'); fetchJobs(); } catch (e) { addToast(e.message, 'error'); } };
@@ -44,43 +58,7 @@ export default function JobsDashboard({ addToast }) {
                 <p>Monitor OCR processing and download results</p>
             </div>
 
-            <div className="stats-grid">
-                <div className="stat-card">
-                    <div className="stat-icon-wrap">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--brand)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
-                            <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
-                        </svg>
-                    </div>
-                    <div className="stat-text">
-                        <div className="stat-value">{total}</div>
-                        <div className="stat-label">Total Jobs</div>
-                    </div>
-                </div>
-                <div className="stat-card">
-                    <div className="stat-icon-wrap">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--success)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" />
-                        </svg>
-                    </div>
-                    <div className="stat-text">
-                        <div className="stat-value">{completed}</div>
-                        <div className="stat-label">Completed</div>
-                    </div>
-                </div>
-                <div className="stat-card">
-                    <div className="stat-icon-wrap">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--info)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
-                            <polyline points="14 2 14 8 20 8" />
-                        </svg>
-                    </div>
-                    <div className="stat-text">
-                        <div className="stat-value">{docs}</div>
-                        <div className="stat-label">Documents</div>
-                    </div>
-                </div>
-            </div>
+            <DashboardCharts />
 
             <div className="card">
                 {loading ? (

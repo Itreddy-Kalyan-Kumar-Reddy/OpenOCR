@@ -94,6 +94,12 @@ export async function deleteJob(jobId) {
     return res.json();
 }
 
+// Analytics
+export const getAnalyticsStats = async () => {
+    const res = await request('/analytics/stats');
+    return res.json();
+};
+
 export function getPreviewUrl(jobId, docId) {
     const token = getToken();
     return `${API_BASE}/documents/${jobId}/${docId}/preview?token=${encodeURIComponent(token || '')}`;
