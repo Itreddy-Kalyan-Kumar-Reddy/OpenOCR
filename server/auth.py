@@ -8,7 +8,7 @@ import secrets
 from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 from jose import JWTError, jwt
 
@@ -52,13 +52,11 @@ class LoginRequest(BaseModel):
     password: str
 
 class UserResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
     id: int
     email: str
     name: str
     created_at: datetime
-
-    class Config:
-        from_attributes = True
 
 class TokenResponse(BaseModel):
     access_token: str
@@ -113,7 +111,7 @@ def signup(req: SignupRequest, db: Session = Depends(get_db)):
 
     token = create_token(user.id)
     print(f"✅ New user registered: {user.email}")
-    return TokenResponse(access_token=token, user=UserResponse.from_orm(user))
+    return TokenResponse(access_token=token, user=UserResponse.model_validate(user))
 
 
 @router.post("/login", response_model=TokenResponse)
@@ -124,9 +122,9 @@ def login(req: LoginRequest, db: Session = Depends(get_db)):
 
     token = create_token(user.id)
     print(f"✅ User logged in: {user.email}")
-    return TokenResponse(access_token=token, user=UserResponse.from_orm(user))
+    return TokenResponse(access_token=token, user=UserResponse.model_validate(user))
 
 
 @router.get("/me", response_model=UserResponse)
 def get_me(current_user: User = Depends(get_current_user)):
-    return UserResponse.from_orm(current_user)
+    return UserResponse.model_validate(current_user)

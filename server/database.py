@@ -10,15 +10,9 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 import uuid
 
-DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite:///./billscan.db")
+DATABASE_URL = os.environ.get("DATABASE_URL", "mysql+pymysql://root:system@localhost:3306/openocr")
 
-# Fix for some PaaS that use postgres:// instead of postgresql://
-if DATABASE_URL.startswith("postgres://"):
-    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
-
-connect_args = {"check_same_thread": False} if "sqlite" in DATABASE_URL else {}
-
-engine = create_engine(DATABASE_URL, connect_args=connect_args)
+engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
@@ -27,8 +21,12 @@ class User(Base):
     __tablename__ = "users"
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String(255), unique=True, index=True)
-    hashed_password = Column(String(255))
-    role = Column(String(50), default="user") # user, admin, auditor
+    name = Column(String(255), nullable=True)
+    password_hash = Column(String(255))
+    role = Column(String(50), default="user")  # user, admin, auditor
+    created_at = Column(DateTime, default=datetime.utcnow)
+    last_login_at = Column(DateTime, nullable=True)
+    is_active = Column(Boolean, default=True)
     jobs = relationship("Job", back_populates="user")
     api_keys = relationship("APIKey", back_populates="user")
 
@@ -142,5 +140,4 @@ def get_db():
 def init_db():
     """Create all tables."""
     Base.metadata.create_all(bind=engine)
-    db_name = DATABASE_URL.split("/")[-1] if "sqlite" in DATABASE_URL else DATABASE_URL.split("@")[-1]
-    print(f"✅ Database initialized ({db_name})")
+    print(f"✅ Database initialized (MySQL: openocr)")
